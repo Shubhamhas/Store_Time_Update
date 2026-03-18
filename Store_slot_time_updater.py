@@ -7,9 +7,12 @@ st.set_page_config(page_title="Store Slot Updater", layout="wide")
 st.title("🏪 Store Slot Time Updater")
 
 # -----------------------------
-# FILE UPLOAD
+# FILE UPLOAD (CSV + EXCEL)
 # -----------------------------
-uploaded_file = st.file_uploader("📂 Upload Excel File", type=["xlsx"])
+uploaded_file = st.file_uploader(
+    "📂 Upload Excel or CSV File",
+    type=["xlsx", "csv"]
+)
 
 # -----------------------------
 # STORE INPUT
@@ -54,7 +57,18 @@ if st.button("🚀 Update File"):
             # -----------------------------
             # READ FILE
             # -----------------------------
-            df = pd.read_excel(uploaded_file, dtype=str)
+            file_name = uploaded_file.name
+
+            if file_name.endswith(".xlsx"):
+                df = pd.read_excel(uploaded_file, dtype=str)
+
+            elif file_name.endswith(".csv"):
+                df = pd.read_csv(uploaded_file, dtype=str)
+
+            else:
+                st.error("Unsupported file format")
+                st.stop()
+
             df.columns = df.columns.str.strip()
 
             # -----------------------------
@@ -62,17 +76,16 @@ if st.button("🚀 Update File"):
             # -----------------------------
             store_list = [s.strip() for s in store_input.split(",")]
 
-            # Existing stores in file
+            # Existing stores
             existing_stores = set(df['StoreID'].astype(str))
 
-            # Find missing stores
+            # Not found stores
             not_found_stores = [s for s in store_list if s not in existing_stores]
 
             # -----------------------------
             # UPDATE DATA
             # -----------------------------
             mask = df['StoreID'].astype(str).isin(store_list)
-
             rows_updated = mask.sum()
 
             df.loc[mask, 'SlotStart'] = slot_start
@@ -88,10 +101,20 @@ if st.button("🚀 Update File"):
                 df['ServiceChargeCC'] = df['ServiceChargeCC'].replace('', pd.NA).fillna("0")
 
             # -----------------------------
-            # OUTPUT FILE
+            # OUTPUT FILE (same format)
             # -----------------------------
             output = io.BytesIO()
-            df.to_excel(output, index=False)
+
+            if file_name.endswith(".xlsx"):
+                df.to_excel(output, index=False)
+                mime_type = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                output_name = "updated_store_data.xlsx"
+
+            else:
+                df.to_csv(output, index=False)
+                mime_type = "text/csv"
+                output_name = "updated_store_data.csv"
+
             output.seek(0)
 
             # -----------------------------
@@ -100,7 +123,7 @@ if st.button("🚀 Update File"):
             st.success(f"✅ {rows_updated} rows updated")
 
             # -----------------------------
-            # SHOW NOT FOUND STORES
+            # NOT FOUND STORES
             # -----------------------------
             if not_found_stores:
                 st.warning(f"⚠️ Stores not found: {', '.join(not_found_stores)}")
@@ -111,8 +134,8 @@ if st.button("🚀 Update File"):
             st.download_button(
                 label="📥 Download Updated File",
                 data=output,
-                file_name="updated_store_data.xlsx",
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                file_name=output_name,
+                mime=mime_type
             )
 
         except Exception as e:
