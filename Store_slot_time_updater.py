@@ -7,7 +7,7 @@ st.set_page_config(page_title="Store Slot Updater", layout="wide")
 st.title("🏪 Store Slot Time Updater")
 
 # -----------------------------
-# FILE UPLOAD (CSV + EXCEL)
+# FILE UPLOAD
 # -----------------------------
 uploaded_file = st.file_uploader(
     "📂 Upload Excel or CSV File",
@@ -15,23 +15,56 @@ uploaded_file = st.file_uploader(
 )
 
 # -----------------------------
-# STORE INPUT
+# NUMBER OF RULES
 # -----------------------------
-store_input = st.text_area(
-    "🏪 Enter Store IDs (comma separated)",
-    placeholder="Example: 101,102,103"
-)
+st.subheader("⚙️ Configure Slot Rules")
+
+num_rules = st.number_input("➕ Number of Rules", min_value=1, max_value=10, value=1)
+
+rules = []
 
 # -----------------------------
-# SLOT TIME INPUT
+# DYNAMIC RULE INPUTS
 # -----------------------------
-col1, col2 = st.columns(2)
+for i in range(num_rules):
+    st.markdown(f"### 🔹 Rule {i+1}")
 
-with col1:
-    slot_start = st.text_input("⏰ Slot Start (hh:mm)", value="09:00")
+    store_ids = st.text_input(
+        f"🏪 Store IDs (comma separated) - Rule {i+1}",
+        key=f"store_{i}",
+        placeholder="101,102,103"
+    )
 
-with col2:
-    slot_end = st.text_input("⏰ Slot End (hh:mm)", value="18:00")
+    col1, col2 = st.columns(2)
+
+    with col1:
+        start_time = st.text_input(
+            f"⏰ Slot Start (hh:mm) - Rule {i+1}",
+            key=f"start_{i}",
+            value="09:00"
+        )
+
+    with col2:
+        end_time = st.text_input(
+            f"⏰ Slot End (hh:mm) - Rule {i+1}",
+            key=f"end_{i}",
+            value="18:00"
+        )
+
+    # DayOfWeek dropdown (1–7)
+    days = st.multiselect(
+        f"📅 Select Day Of Week (1=Mon ... 7=Sun) - Rule {i+1}",
+        options=[1, 2, 3, 4, 5, 6, 7],
+        default=[1,2,3,4,5],
+        key=f"days_{i}"
+    )
+
+    rules.append({
+        "stores": store_ids,
+        "start": start_time,
+        "end": end_time,
+        "days": days
+    })
 
 # -----------------------------
 # DEFAULT OPTIONS
@@ -48,9 +81,6 @@ if st.button("🚀 Update File"):
 
     if uploaded_file is None:
         st.error("Please upload a file first.")
-    
-    elif not store_input.strip():
-        st.error("Please enter store IDs.")
     
     else:
         try:
@@ -72,24 +102,37 @@ if st.button("🚀 Update File"):
             df.columns = df.columns.str.strip()
 
             # -----------------------------
-            # PROCESS STORE LIST
+            # TRACKING
             # -----------------------------
-            store_list = [s.strip() for s in store_input.split(",")]
+            all_input_stores = []
+            total_rows_updated = 0
 
-            # Existing stores
+            # -----------------------------
+            # APPLY RULES
+            # -----------------------------
+            for rule in rules:
+                if not rule["stores"]:
+                    continue
+
+                store_list = [s.strip() for s in rule["stores"].split(",")]
+                all_input_stores.extend(store_list)
+
+                mask = (
+                    df['StoreID'].astype(str).isin(store_list) &
+                    df['DayOfWeek'].astype(str).isin([str(d) for d in rule["days"]])
+                )
+
+                rows_updated = mask.sum()
+                total_rows_updated += rows_updated
+
+                df.loc[mask, 'SlotStart'] = rule["start"]
+                df.loc[mask, 'SlotEnd'] = rule["end"]
+
+            # -----------------------------
+            # FIND NOT FOUND STORES
+            # -----------------------------
             existing_stores = set(df['StoreID'].astype(str))
-
-            # Not found stores
-            not_found_stores = [s for s in store_list if s not in existing_stores]
-
-            # -----------------------------
-            # UPDATE DATA
-            # -----------------------------
-            mask = df['StoreID'].astype(str).isin(store_list)
-            rows_updated = mask.sum()
-
-            df.loc[mask, 'SlotStart'] = slot_start
-            df.loc[mask, 'SlotEnd'] = slot_end
+            not_found_stores = [s for s in set(all_input_stores) if s not in existing_stores]
 
             # -----------------------------
             # APPLY DEFAULTS
@@ -101,7 +144,7 @@ if st.button("🚀 Update File"):
                 df['ServiceChargeCC'] = df['ServiceChargeCC'].replace('', pd.NA).fillna("0")
 
             # -----------------------------
-            # OUTPUT FILE (same format)
+            # OUTPUT FILE
             # -----------------------------
             output = io.BytesIO()
 
@@ -109,7 +152,6 @@ if st.button("🚀 Update File"):
                 df.to_excel(output, index=False)
                 mime_type = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
                 output_name = "updated_store_data.xlsx"
-
             else:
                 df.to_csv(output, index=False)
                 mime_type = "text/csv"
@@ -120,10 +162,10 @@ if st.button("🚀 Update File"):
             # -----------------------------
             # SUCCESS MESSAGE
             # -----------------------------
-            st.success(f"✅ {rows_updated} rows updated")
+            st.success(f"✅ Total {total_rows_updated} rows updated")
 
             # -----------------------------
-            # NOT FOUND STORES
+            # SHOW NOT FOUND STORES
             # -----------------------------
             if not_found_stores:
                 st.warning(f"⚠️ Stores not found: {', '.join(not_found_stores)}")
