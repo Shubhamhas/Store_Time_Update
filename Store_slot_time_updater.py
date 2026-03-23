@@ -51,7 +51,6 @@ for i in range(num_rules):
             value="18:00"
         )
 
-    # DayOfWeek dropdown (1–7)
     days = st.multiselect(
         f"📅 Select Day Of Week (1=Mon ... 7=Sun) - Rule {i+1}",
         options=[1, 2, 3, 4, 5, 6, 7],
@@ -67,12 +66,20 @@ for i in range(num_rules):
     })
 
 # -----------------------------
-# DEFAULT OPTIONS
+# NEW USER INPUTS
 # -----------------------------
-st.subheader("⚙️ Default Values")
+st.subheader("📅 Global Settings for All Stores")
 
-fill_enddate = st.checkbox("Fill EndDate as 'N/A'", value=True)
-fill_servicecc = st.checkbox("Fill ServiceChargeCC as 0", value=True)
+user_startdate = st.text_input(
+    "📅 Enter StartDate (DD/MM/YYYY)",
+    placeholder="01/01/2025"
+)
+
+picking_limit = st.number_input(
+    "📦 Enter Picking Limit",
+    min_value=0,
+    value=0
+)
 
 # -----------------------------
 # PROCESS BUTTON
@@ -104,7 +111,7 @@ if st.button("🚀 Update File"):
             # -----------------------------
             all_input_stores = []
             total_rows_updated = 0
-            new_rows = []  # rows to append
+            new_rows = []
 
             # -----------------------------
             # APPLY RULES
@@ -117,7 +124,6 @@ if st.button("🚀 Update File"):
                 store_list = [s.strip() for s in rule["stores"].split(",")]
                 all_input_stores.extend(store_list)
 
-                # EXISTING ROW UPDATE
                 mask = (
                     df["StoreID"].astype(str).isin(store_list) &
                     df["DayOfWeek"].astype(str).isin([str(d) for d in rule["days"]])
@@ -129,47 +135,36 @@ if st.button("🚀 Update File"):
                 df.loc[mask, "SlotStart"] = rule["start"]
                 df.loc[mask, "SlotEnd"] = rule["end"]
 
-                # -----------------------------
-                # APPEND MISSING STORES
-                # -----------------------------
                 existing_store_ids = set(df["StoreID"].astype(str))
 
+                # Add missing stores
                 for store_id in store_list:
-
                     if store_id not in existing_store_ids:
 
-                        # Pick the first row as template
                         reference_row = df.iloc[0].copy()
 
-                        # Overwrite specific fields
                         reference_row["StoreID"] = store_id
                         reference_row["SlotStart"] = rule["start"]
                         reference_row["SlotEnd"] = rule["end"]
 
-                        # Create a row for every selected day
                         for d in rule["days"]:
                             new_entry = reference_row.copy()
                             new_entry["DayOfWeek"] = str(d)
                             new_rows.append(new_entry)
 
-            # Append newly created rows
             if new_rows:
                 df = pd.concat([df, pd.DataFrame(new_rows)], ignore_index=True)
 
             # -----------------------------
-            # FIND NOT FOUND STORES
+            # FORCE EndDate = "n/a" FOR EVERY RECORD
             # -----------------------------
-            existing_stores = set(df["StoreID"].astype(str))
-            not_found_stores = [s for s in set(all_input_stores) if s not in existing_stores]
+            df["EndDate"] = "n/a"
 
             # -----------------------------
-            # APPLY DEFAULTS
+            # APPLY GLOBAL StartDate & PickingLimit
             # -----------------------------
-            if fill_enddate:
-                df['EndDate'] = df['EndDate'].replace('', pd.NA).fillna("N/A")
-
-            if fill_servicecc:
-                df['ServiceChargeCC'] = df['ServiceChargeCC'].replace('', pd.NA).fillna("0")
+            df["StartDate"] = user_startdate
+            df["PickingLimit"] = picking_limit
 
             # -----------------------------
             # OUTPUT FILE
@@ -187,23 +182,10 @@ if st.button("🚀 Update File"):
 
             output.seek(0)
 
-            # -----------------------------
-            # SUCCESS MESSAGE
-            # -----------------------------
-            st.success(f"✅ Total {total_rows_updated} existing rows updated")
-
+            st.success(f"✅ Total {total_rows_updated} updated")
             if new_rows:
-                st.success(f"🆕 {len(new_rows)} new rows added for missing stores")
+                st.success(f"🆕 {len(new_rows)} new rows added")
 
-            # -----------------------------
-            # SHOW NOT FOUND STORES
-            # -----------------------------
-            if not_found_stores:
-                st.warning(f"⚠️ Stores not found in file originally (but added now): {', '.join(not_found_stores)}")
-
-            # -----------------------------
-            # DOWNLOAD BUTTON
-            # -----------------------------
             st.download_button(
                 label="📥 Download Updated File",
                 data=output,
