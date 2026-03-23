@@ -156,7 +156,7 @@ if st.button("🚀 Update File"):
                 df = pd.concat([df, pd.DataFrame(new_rows)], ignore_index=True)
 
             # -----------------------------
-            # FORCE EndDate = "n/a" FOR EVERY RECORD
+            # FORCE EndDate = "n/a" FOR ALL RECORDS
             # -----------------------------
             df["EndDate"] = "n/a"
 
@@ -165,6 +165,11 @@ if st.button("🚀 Update File"):
             # -----------------------------
             df["StartDate"] = user_startdate
             df["PickingLimit"] = picking_limit
+
+            # -----------------------------
+            # FORCE ServiceChargeCC = "0" FOR ALL RECORDS
+            # -----------------------------
+            df["ServiceChargeCC"] = "0"
 
             # -----------------------------
             # OUTPUT FILE
@@ -182,7 +187,7 @@ if st.button("🚀 Update File"):
 
             output.seek(0)
 
-            st.success(f"✅ Total {total_rows_updated} updated")
+            st.success(f"✅ {total_rows_updated} rows updated")
             if new_rows:
                 st.success(f"🆕 {len(new_rows)} new rows added")
 
