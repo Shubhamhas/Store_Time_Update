@@ -91,10 +91,8 @@ if st.button("🚀 Update File"):
 
             if file_name.endswith(".xlsx"):
                 df = pd.read_excel(uploaded_file, dtype=str)
-
             elif file_name.endswith(".csv"):
                 df = pd.read_csv(uploaded_file, dtype=str)
-
             else:
                 st.error("Unsupported file format")
                 st.stop()
@@ -106,32 +104,62 @@ if st.button("🚀 Update File"):
             # -----------------------------
             all_input_stores = []
             total_rows_updated = 0
+            new_rows = []  # rows to append
 
             # -----------------------------
             # APPLY RULES
             # -----------------------------
             for rule in rules:
+
                 if not rule["stores"]:
                     continue
 
                 store_list = [s.strip() for s in rule["stores"].split(",")]
                 all_input_stores.extend(store_list)
 
+                # EXISTING ROW UPDATE
                 mask = (
-                    df['StoreID'].astype(str).isin(store_list) &
-                    df['DayOfWeek'].astype(str).isin([str(d) for d in rule["days"]])
+                    df["StoreID"].astype(str).isin(store_list) &
+                    df["DayOfWeek"].astype(str).isin([str(d) for d in rule["days"]])
                 )
 
                 rows_updated = mask.sum()
                 total_rows_updated += rows_updated
 
-                df.loc[mask, 'SlotStart'] = rule["start"]
-                df.loc[mask, 'SlotEnd'] = rule["end"]
+                df.loc[mask, "SlotStart"] = rule["start"]
+                df.loc[mask, "SlotEnd"] = rule["end"]
+
+                # -----------------------------
+                # APPEND MISSING STORES
+                # -----------------------------
+                existing_store_ids = set(df["StoreID"].astype(str))
+
+                for store_id in store_list:
+
+                    if store_id not in existing_store_ids:
+
+                        # Pick the first row as template
+                        reference_row = df.iloc[0].copy()
+
+                        # Overwrite specific fields
+                        reference_row["StoreID"] = store_id
+                        reference_row["SlotStart"] = rule["start"]
+                        reference_row["SlotEnd"] = rule["end"]
+
+                        # Create a row for every selected day
+                        for d in rule["days"]:
+                            new_entry = reference_row.copy()
+                            new_entry["DayOfWeek"] = str(d)
+                            new_rows.append(new_entry)
+
+            # Append newly created rows
+            if new_rows:
+                df = pd.concat([df, pd.DataFrame(new_rows)], ignore_index=True)
 
             # -----------------------------
             # FIND NOT FOUND STORES
             # -----------------------------
-            existing_stores = set(df['StoreID'].astype(str))
+            existing_stores = set(df["StoreID"].astype(str))
             not_found_stores = [s for s in set(all_input_stores) if s not in existing_stores]
 
             # -----------------------------
@@ -162,13 +190,16 @@ if st.button("🚀 Update File"):
             # -----------------------------
             # SUCCESS MESSAGE
             # -----------------------------
-            st.success(f"✅ Total {total_rows_updated} rows updated")
+            st.success(f"✅ Total {total_rows_updated} existing rows updated")
+
+            if new_rows:
+                st.success(f"🆕 {len(new_rows)} new rows added for missing stores")
 
             # -----------------------------
             # SHOW NOT FOUND STORES
             # -----------------------------
             if not_found_stores:
-                st.warning(f"⚠️ Stores not found: {', '.join(not_found_stores)}")
+                st.warning(f"⚠️ Stores not found in file originally (but added now): {', '.join(not_found_stores)}")
 
             # -----------------------------
             # DOWNLOAD BUTTON
